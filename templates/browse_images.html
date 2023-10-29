@@ -21,7 +21,7 @@
                 <div style="position: relative;">
                     <img src="{{ url_for('static', filename='img/' + image_name) }}" onload="resizeBoundingBoxes(this)" alt="Image" class="img-fluid" data-toggle="lightbox">
                     {% for rect in face_coordinates.get(image_name, []) %}
-                    <div style="position: absolute; 
+                    <div class="bounding_boxes" style="position: absolute; 
                         top: {{ rect[0][1] }}px; 
                         left: {{ rect[0][0] }}px; 
                         width: {{ (rect[1][0]-rect[0][0]) }}px; 
@@ -29,8 +29,13 @@
                         border: 2px solid red;"
                         data-image="{{ image_name }}"
                         data-face-index="{{ loop.index0 }}"
+                        data-original-left="{{ rect[0][0] }}"
+                        data-original-top="{{ rect[0][1] }}"
+                        data-original-width="{{ (rect[1][0]-rect[0][0]) }}"
+                        data-original-height="{{ (rect[1][1]-rect[0][1]) }}"
                         onclick="showTagModal(this, '{{ rect[0][0] }}', '{{ rect[0][1] }}', '{{ (rect[1][0]-rect[0][0]) }}', '{{ (rect[1][1]-rect[0][1]) }}');">
                     </div>
+
                     {% endfor %}
                 </div>
             </div>
@@ -118,29 +123,38 @@
         })
     }
 
-    function resizeBoundingBoxes(img) {
-        // Get the rendered width of the image
-        var renderedWidth = img.width;
-        // Get the intrinsic width of the image
-        var intrinsicWidth = img.naturalWidth;
-        // Calculate the scaling factor
-        var scalingFactor = renderedWidth / intrinsicWidth;
-        
-        // Loop through all sibling bounding boxes of the image and resize them
-        $(img).siblings('div').each(function(index, el) {
-            var originalLeft = parseFloat($(el).css('left'));
-            var originalTop = parseFloat($(el).css('top'));
-            var originalWidth = parseFloat($(el).css('width'));
-            var originalHeight = parseFloat($(el).css('height'));
+    function resizeBoundingBoxes(imgElement) {
+        // Get the original and current width/height of the image.
+        var originalWidth = imgElement.naturalWidth;
+        var originalHeight = imgElement.naturalHeight;
+        var currentWidth = imgElement.offsetWidth;
+        var currentHeight = imgElement.offsetHeight;
     
-            $(el).css({
-                left: originalLeft * scalingFactor + 'px',
-                top: originalTop * scalingFactor + 'px',
-                width: originalWidth * scalingFactor + 'px',
-                height: originalHeight * scalingFactor + 'px',
-            });
+        // Compute the scale factors.
+        var widthScale = currentWidth / originalWidth;
+        var heightScale = currentHeight / originalHeight;
+    
+        // Find all bounding boxes associated with this image and scale their dimensions.
+        var boundingBoxes = imgElement.parentNode.querySelectorAll('#bounding-boxes > div');
+
+        boundingBoxes.forEach(function(box) {
+            // Fetch the original coordinates and dimensions.
+            var originalLeft = parseFloat(box.getAttribute('data-original-left'));
+            var originalTop = parseFloat(box.getAttribute('data-original-top'));
+            var originalWidth = parseFloat(box.getAttribute('data-original-width'));
+            var originalHeight = parseFloat(box.getAttribute('data-original-height'));
+    
+            // Apply the scale factors.
+            box.style.left = (originalLeft * widthScale) + 'px';
+            box.style.top = (originalTop * heightScale) + 'px';
+            box.style.width = (originalWidth * widthScale) + 'px';
+            box.style.height = (originalHeight * heightScale) + 'px';
         });
     }
+    
+    
+    
+    
     
     
     $(document).on('click', '[data-toggle="lightbox"]', function(event) {
@@ -154,7 +168,12 @@
                 x: $(el).css('left'),
                 y: $(el).css('top'),
                 w: $(el).css('width'),
-                h: $(el).css('height')
+                h: $(el).css('height'),
+                originalLeft: $(el).data('original-left'),
+                originalTop: $(el).data('original-top'),
+                originalWidth: $(el).data('original-width'),
+                originalHeight: $(el).data('original-height'),
+                index: $(el).data('face-index')
             };
             boxes.push(boxData);
         });
@@ -162,13 +181,23 @@
         // Display bounding boxes in modal
         var boxesHtml = '';
         boxes.forEach(function(box, index) {
-            boxesHtml += `<div style="position: absolute; top: ${box.y}; left: ${box.x}; width: ${box.w}; height: ${box.h}; border: 2px solid red; color: white; text-align: center; line-height: ${box.h};" data-image="${imgSrc}"  data-index="${index}">${index + 1}</div>`;
-        });
+            boxesHtml += `
+            <div style="position: absolute; top: ${box.y}px; left: ${box.x}px; width: ${box.w}px; height: ${box.h}px; border: 2px solid red; color: white; text-align: center; line-height: ${box.h}px;" 
+            data-image="${imgSrc}"  
+            data-face-index="${index}"
+            data-original-left="${box.originalLeft}"
+            data-original-top="${box.originalTop}"
+            data-original-width="${box.originalWidth}"
+            data-original-height="${box.originalHeight}"
+            data-index="${index}">${index + 1}</div>`;
+            });
         $('#bounding-boxes').html(boxesHtml);
         
-        $('#modal-image').attr('src', imgSrc);
-        // Adjust the bounding boxes after setting the modal image source
-        resizeBoundingBoxes(document.getElementById('modal-image'));
+        $('#modal-image').attr('src', imgSrc).on('load', function() {
+            // Adjust the bounding boxes after the modal image has fully loaded
+            resizeBoundingBoxes(this);
+            $('#tagModal').modal('show');
+        });
         $('#tagModal').modal('show');
     });
 
