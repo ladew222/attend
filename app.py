@@ -35,9 +35,19 @@ FACE_BOUNDING_BOX_CSV = "face_bounding_boxes.csv"
 # Paths for storing images and the CSV
 image_storage_path = 'stored_images'
 face_detections_csv = 'face_detections.csv'
+MATCHES_CSV_PATH = 'matches.csv'
+
 
 # Lock for thread-safe operations on the CSV file
 csv_file_lock = threading.Lock()
+
+
+def save_face_image(face_image, match_id, timestamp):
+    # Save the face image with a filename that includes the match_id and the timestamp
+    filename = f"match_{match_id}_{timestamp.replace(':', '')}.jpg"
+    filepath = os.path.join(CAPTURED_IMAGES_DIR, filename)
+    cv2.imwrite(filepath, face_image)
+    print(f"Saved face image of match {match_id}: {filename}")
 
 def process_video_feed():
     cap = cv2.VideoCapture(0)  # Use 0 for the default camera
@@ -73,18 +83,35 @@ def process_frame(frame):
     rects = detector(gray, 1)
 
     # Loop over each detected face and check for matches
-    for i, rect in enumerate(rects):
+    for rect in enumerate(rects):
         shape = sp(gray, rect)
-        embedding = facerec.compute_face_descriptor(frame, shape)
-        # Add your logic here to check against known faces and record a match
-        # For example, you could call a function check_for_match(embedding)
-        
-        # You can also draw the bounding box in the frame if you want to show it
+        embedding = np.array(facerec.compute_face_descriptor(frame, shape))
+
+        # Use your search_similar_faces function to check for a match
+        match_id = search_similar_faces(embedding)
+
+        if match_id is not None:
+            # If there's a match, record the time and match_id
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            record_match(match_id, timestamp)
+            
+            # Optionally, save the image of the matched face
+            matched_face_image = frame[rect.top():rect.bottom(), rect.left():rect.right()]
+            save_face_image(matched_face_image, match_id, timestamp)
+
+        # Draw a bounding box around the face
         (x, y, w, h) = (rect.left(), rect.top(), rect.width(), rect.height())
         cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
     # Display the frame in a window
     cv2.imshow('Video', frame)
+    
+    
+def record_match(match_id, timestamp):
+    """Record a match with a timestamp to a CSV file."""
+    with open(MATCHES_CSV_PATH, 'a', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow([match_id, timestamp])
 
 def save_frame_image(frame):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
