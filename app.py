@@ -253,11 +253,13 @@ def browse_images(directory_name):
 FACE_TAGS_CSV = "face_tags.csv"
 @app.route('/api_tag_face', methods=['POST'])
 def api_tag_face():
-    image_name = request.form.get("image_name")
+    # Assuming the filename is in the format "directory_name/image_name"
+    filename = request.form.get("filename")
+    directory_name, image_name = os.path.split(filename)  # Splitting the filename into directory and image name
+    directory_name = directory_name.lstrip('/')
     face_index = int(request.form.get("face_index"))
     student_id = request.form.get("student_id")
-    directory_name = request.form.get("directory_name")
-    
+
     # Get the index of the embedding
     embedding_index = None
     if os.path.exists(FACE_EMBEDDINGS_CSV):
@@ -265,7 +267,7 @@ def api_tag_face():
         matching_row = df_embeddings[
             (df_embeddings["directory_name"] == directory_name) & 
             (df_embeddings["image_name"] == image_name) & 
-            (df_embeddings["face_index"] == face_index)
+            (int(df_embeddings["face_index"]) == face_index)
         ]
         if not matching_row.empty:
             embedding_index = matching_row.index[0]  # Assuming index is a sequential integer

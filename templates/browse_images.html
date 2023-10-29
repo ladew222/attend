@@ -132,7 +132,7 @@
         // Display bounding boxes in modal
         var boxesHtml = '';
         boxes.forEach(function(box, index) {
-            boxesHtml += `<div style="position: absolute; top: ${box.y}; left: ${box.x}; width: ${box.w}; height: ${box.h}; border: 2px solid red; color: white; text-align: center; line-height: ${box.h};">${index + 1}</div>`;
+            boxesHtml += `<div style="position: absolute; top: ${box.y}; left: ${box.x}; width: ${box.w}; height: ${box.h}; border: 2px solid red; color: white; text-align: center; line-height: ${box.h};" data-image="${imgSrc}"  data-index="${index}">${index + 1}</div>`;
         });
         $('#bounding-boxes').html(boxesHtml);
         
@@ -144,10 +144,9 @@
     $(document).on('click', '#bounding-boxes div', function() {
         const boxNumber = parseInt($(this).text()) - 1; // Convert to zero-based index
         const studentId = $('#student-dropdown').val();
-        const x = $('#modal-x').val();
-        const y = $('#modal-y').val();
-        const w = $('#modal-w').val();
-        const h = $('#modal-h').val();
+        const imageInfo = $(this).data('image');
+
+
         const imageName = $('#modal-image-name').val();
         
         // Log for debugging purposes
@@ -164,12 +163,7 @@
             method: 'POST',
             data: {
                 student_id: studentId,
-                x: x,
-                y: y,
-                w: w,
-                h: h,
-                directory_name: $('#modal-directory-name').val(), // Send the directory name
-                image_name: imageName,
+                filename: imageInfo , // Send the image name
                 face_index: boxNumber  // Send the face index
             },
             success: function(response) {

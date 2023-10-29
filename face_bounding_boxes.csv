@@ -1,2 +1,3 @@
 directory_name,image_name,face_index,top_left_x,top_left_y,bottom_right_x,bottom_right_y
-
+static/img,IMG_1046.png,0,1666,820,1852,1006
+static/img,IMG_1046.png,1,633,1204,954,1525
