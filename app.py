@@ -12,6 +12,14 @@ from flask_uploads import UploadSet, IMAGES, configure_uploads
 from flask import render_template, flash, redirect, url_for, request
 from datetime import datetime
 import pandas as pd
+from sklearn.metrics.pairwise import cosine_similarity
+import threading
+import time
+
+
+# This will store the last time we saved an image
+last_saved_time = time.time()
+
 
 app = Flask(__name__)
 
@@ -24,6 +32,89 @@ FACE_TAGS_CSV = "face_tags.csv"
 FACE_EMBEDDINGS_CSV = "face_embeddings.csv"
 ITEMS_PER_PAGE = 20
 FACE_BOUNDING_BOX_CSV = "face_bounding_boxes.csv"
+# Paths for storing images and the CSV
+image_storage_path = 'stored_images'
+face_detections_csv = 'face_detections.csv'
+
+# Lock for thread-safe operations on the CSV file
+csv_file_lock = threading.Lock()
+
+def process_video_feed():
+    cap = cv2.VideoCapture(0)  # Use 0 for the default camera
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                print("Failed to grab frame")
+                break
+
+            # Process the frame
+            process_frame(frame)
+
+            # Save an image every 30 seconds
+            global last_saved_time
+            if time.time() - last_saved_time > 30:
+                save_frame_image(frame)
+                last_saved_time = time.time()
+
+            # Press 'q' to close the video window
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+    finally:
+        cap.release()
+        cv2.destroyAllWindows()
+
+def process_frame(frame):
+    # Convert frame to grayscale for face detection
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+    # Detect faces
+    rects = detector(gray, 1)
+
+    # Loop over each detected face and check for matches
+    for i, rect in enumerate(rects):
+        shape = sp(gray, rect)
+        embedding = facerec.compute_face_descriptor(frame, shape)
+        # Add your logic here to check against known faces and record a match
+        # For example, you could call a function check_for_match(embedding)
+        
+        # You can also draw the bounding box in the frame if you want to show it
+        (x, y, w, h) = (rect.left(), rect.top(), rect.width(), rect.height())
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+    # Display the frame in a window
+    cv2.imshow('Video', frame)
+
+def save_frame_image(frame):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"frame_{timestamp}.jpg"
+    filepath = os.path.join(CAPTURED_IMAGES_DIR, filename)
+    cv2.imwrite(filepath, frame)
+    print(f"Saved image: {filename}")
+
+
+# Global variable to keep track of the face recognition state
+face_recognition_enabled = False
+
+
+def search_similar_faces(new_embedding, threshold=0.5):
+    # Load the embeddings and the tags into pandas DataFrames
+    df_embeddings = pd.read_csv(FACE_EMBEDDINGS_CSV)
+    df_tags = pd.read_csv(FACE_TAGS_CSV)
+    
+    # Join the embeddings with the tags based on the embedding index
+    df_combined = df_embeddings.join(df_tags.set_index('embedding_index'), on=df_embeddings.index)
+
+    # Calculate the similarity of the new_embedding with all embeddings in the DataFrame
+    df_combined['similarity'] = df_combined.apply(lambda row: get_similarity(new_embedding, row[['dim_' + str(i) for i in range(128)]]), axis=1)
+    
+    # Filter the results based on the threshold and sort by similarity
+    matched_faces = df_combined[df_combined['similarity'] >= threshold]
+    matched_faces = matched_faces.sort_values(by='similarity', ascending=False)
+    
+    # Return the matched faces
+    return matched_faces[['directory_name', 'image_name', 'face_index', 'student_id', 'similarity']]
 
 
 def get_face_embedding(directory_name, image_name, face_index):
@@ -45,8 +136,21 @@ def ensure_csv_exists(file_path, headers):
         with open(file_path, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(headers)
-            
-            
+ 
+def save_face_details_to_csv(directory_name, image_name, face_index, student_id, time, date, class_name):
+    """
+    Save face details to a CSV file.
+    """
+    # Check if CSV exists, if not create it with headers
+    ensure_csv_exists(face_detections_csv, ["directory_name", "image_name", "face_index", "student_id", "time", "date", "class_name"])
+    
+    with csv_file_lock:
+        with open(face_detections_csv, 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([directory_name, image_name, face_index, student_id, time, date, class_name])           
+
+def get_similarity(embedding1, embedding2):
+    return cosine_similarity([embedding1], [embedding2])[0][0]
             
 ensure_csv_exists(FACE_EMBEDDINGS_CSV, ["directory_name", "image_name", "face_index"] + [f"dim_{i}" for i in range(128)])
 
@@ -282,6 +386,10 @@ def api_tag_face():
 
     return jsonify({"status": "success"})
 
+    # You may want to run the video feed processing in a separate thread
+    # This allows the Flask server to run concurrently with the video feed
+    video_thread = Thread(target=process_video_feed)
+    video_thread.start()
 
 if __name__ == "__main__":
     app.run(debug=True)
