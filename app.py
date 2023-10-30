@@ -16,11 +16,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 import threading
 import time
 
-
 # This will store the last time we saved an image
 last_saved_time = time.time()
-
-
 app = Flask(__name__)
 
 app.secret_key = "3efae3"
@@ -37,10 +34,8 @@ image_storage_path = 'stored_images'
 face_detections_csv = 'face_detections.csv'
 MATCHES_CSV_PATH = 'matches.csv'
 
-
 # Lock for thread-safe operations on the CSV file
 csv_file_lock = threading.Lock()
-
 
 def save_face_image(face_image, match_id, timestamp):
     # Save the face image with a filename that includes the match_id and the timestamp
@@ -282,12 +277,7 @@ if not os.path.exists(FACE_EMBEDDINGS_CSV):
         writer = csv.writer(f)
         writer.writerow(["directory_name", "image_name", "face_index", "embedding"])
 
-
-
 def save_bounding_box_to_csv(directory_name, image_name, face_index, rect):
-    """
-    Save bounding box coordinates to the face_bounding_box.csv using pandas.
-    """
     # Define the columns and the data to be saved
     columns = ["directory_name", "image_name", "face_index", "left", "top", "right", "bottom"]
     data = [directory_name, image_name, face_index, rect.left(), rect.top(), rect.right(), rect.bottom()]
@@ -413,8 +403,6 @@ def api_tag_face():
 
     return jsonify({"status": "success"})
 
-    # You may want to run the video feed processing in a separate thread
-    # This allows the Flask server to run concurrently with the video feed
     video_thread = Thread(target=process_video_feed)
     video_thread.start()
 
